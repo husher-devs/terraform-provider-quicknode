@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -44,6 +45,10 @@ func TestAccMinimalQuicknodeEndpointResource(t *testing.T) {
 				Config: testAccQuickNodeResource(rName, "created-by-terraform", "tag1", "tag2"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("quicknode_endpoint.main", "id"),
+					// eth/mainnet offers WebSocket support, so both URLs must be
+					// populated and must carry no token path.
+					resource.TestMatchResourceAttr("quicknode_endpoint.main", "url", regexp.MustCompile(`^https://[^/]+$`)),
+					resource.TestMatchResourceAttr("quicknode_endpoint.main", "wss_url", regexp.MustCompile(`^wss://[^/]+$`)),
 				),
 			},
 			// ImportState testing
@@ -295,5 +300,57 @@ func TestMultichainDiff_NullVsFalse(t *testing.T) {
 	}
 	if state.Equal(plan) {
 		t.Fatalf("sanity: Equal() should still distinguish null and false; this test only guards against using Equal() for the diff")
+	}
+}
+
+func TestSetUrls(t *testing.T) {
+	wss, empty := "wss://example-endpoint.quiknode.pro/abc123/", ""
+
+	tests := map[string]struct {
+		httpUrl string
+		wssUrl  *string
+		wantUrl types.String
+		wantWss types.String
+	}{
+		"http and wss": {
+			httpUrl: "https://example-endpoint.quiknode.pro/abc123/",
+			wssUrl:  &wss,
+			wantUrl: types.StringValue("https://example-endpoint.quiknode.pro"),
+			wantWss: types.StringValue("wss://example-endpoint.quiknode.pro"),
+		},
+		// The spec types wss_url as nullable, but pin both wire
+		// representations of "no WebSocket" so neither regresses.
+		"nil wss": {
+			httpUrl: "https://example-endpoint.matic.quiknode.pro/abc123/",
+			wssUrl:  nil,
+			wantUrl: types.StringValue("https://example-endpoint.matic.quiknode.pro"),
+			wantWss: types.StringNull(),
+		},
+		"empty wss": {
+			httpUrl: "https://example-endpoint.quiknode.pro/abc123/",
+			wssUrl:  &empty,
+			wantUrl: types.StringValue("https://example-endpoint.quiknode.pro"),
+			wantWss: types.StringNull(),
+		},
+		"unparseable http url": {
+			httpUrl: "not-a-url",
+			wssUrl:  nil,
+			wantUrl: types.StringNull(),
+			wantWss: types.StringNull(),
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			var data EndpointResourceModel
+			data.setUrls(tc.httpUrl, tc.wssUrl)
+
+			if !data.Url.Equal(tc.wantUrl) {
+				t.Errorf("url: got %v, want %v", data.Url, tc.wantUrl)
+			}
+			if !data.WssUrl.Equal(tc.wantWss) {
+				t.Errorf("wss_url: got %v, want %v", data.WssUrl, tc.wantWss)
+			}
+		})
 	}
 }
