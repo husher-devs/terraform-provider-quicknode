@@ -161,7 +161,19 @@ func (p *QuickNodeProvider) Configure(ctx context.Context, req provider.Configur
 		return
 	}
 
-	if chainsResponse.StatusCode() != 200 {
+	// The chain list only serves quicknode_endpoint. A key or an account
+	// without the Admin API still manages streams, so a 403 here is a warning:
+	// endpoints then fail their plan with an empty chain list, streams do not.
+	var chains []quicknode.Chain
+	switch chainsResponse.StatusCode() {
+	case 200:
+		chains = chainsResponse.JSON200.Data
+	case 403:
+		resp.Diagnostics.AddWarning(
+			"Admin API not available - configuring provider",
+			"The chain list returned 403. quicknode_endpoint resources cannot be planned with this key; quicknode_stream resources can.",
+		)
+	default:
 		m, err := utils.BuildRequestErrorMessage(chainsResponse.Status(), chainsResponse.Body)
 		if err != nil {
 			resp.Diagnostics.AddWarning(fmt.Sprintf("%s - configuring provider", utils.InternalErrorSummary), utils.BuildInternalErrorMessage(err))
@@ -174,8 +186,6 @@ func (p *QuickNodeProvider) Configure(ctx context.Context, req provider.Configur
 
 		return
 	}
-
-	chains := chainsResponse.JSON200.Data
 
 	qnd := QuickNodeData{
 		Client:        client,
