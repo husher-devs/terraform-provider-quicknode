@@ -1,35 +1,20 @@
-# Terraform Provider release workflow.
+# Builds a release of this fork when a tag such as v0.10.1 is pushed.
+#
+# The archives hang off the GitHub release and are installed from a filesystem
+# mirror, never from the Terraform Registry, so the checksums are not signed
+# and no SBOM is made.
 name: Release
 
-# This GitHub action creates a release when a tag that matches the pattern
-# "v*" (e.g. v0.1.0) is created.
 on:
   push:
-    branches:
-      - main
+    tags:
+      - 'v*'
 
 jobs:
-  conventional-commit-release:
-    uses: circlefin/circle-public-github-workflows/.github/workflows/conventional-commit-release.yaml@v1
-    with:
-      release_type: go
-      additional_unqualified_tags: true
-      extra_tags: stable
-    secrets:
-      RELEASE_TOKEN: ${{ secrets.PUBLIC_RELEASES_TOKEN }}
-      RELEASE_ACTOR_GPG_PRIVATE_KEY: ${{ secrets.PUBLIC_RELEASES_GPG_PRIVATE_KEY }}
-      RELEASE_ACTOR_GPG_PASSPHRASE: ${{ secrets.PUBLIC_RELEASES_GPG_PASSPHRASE }}
-      RELEASE_ACTOR_GPG_KEY_FINGERPRINT: ${{ secrets.PUBLIC_RELEASES_GPG_FINGERPRINT }}
-
   goreleaser:
-    needs:
-      - conventional-commit-release
-    if: needs.conventional-commit-release.outputs.release_created == 'true'
     permissions:
       contents: write
-    runs-on: github-hosted-small
-    env:
-      GORELEASER_CURRENT_TAG: ${{ needs.conventional-commit-release.outputs.release_tag }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -38,18 +23,9 @@ jobs:
         with:
           go-version-file: 'go.mod'
           cache: true
-      - uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
-      - name: Import GPG key
-        uses: crazy-max/ghaction-import-gpg@2dc316deee8e90f13e1a351ab510b4d5bc0c82cd # v7.0.0
-        id: import_gpg
-        with:
-          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
-          passphrase: ${{ secrets.GPG_PASSPHRASE }}
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@9ed2f89a662bf1735a48bc8557fd212fa902bebf # v6.1.0
         with:
-          args: release --clean
+          args: release --clean --skip=sign,sbom
         env:
-          # GitHub sets the GITHUB_TOKEN secret automatically.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GPG_FINGERPRINT: ${{ steps.import_gpg.outputs.fingerprint }}
