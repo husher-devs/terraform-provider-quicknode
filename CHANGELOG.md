@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.10.1](https://github.com/husher-devs/terraform-provider-quicknode/compare/v0.10.0...v0.10.1) (2026-09-21)
+
+A release of the `husher-devs` fork, built by its own workflow and installed from a filesystem mirror.
+
+### Bug Fixes
+
+* **provider:** a 403 from the Admin API chain list while configuring the provider is a warning, so a key that may manage Streams but not the Admin API can plan and apply `quicknode_stream` resources; `quicknode_endpoint` resources still need the Admin API
+
 ## [0.10.0](https://github.com/circlefin/terraform-provider-quicknode/compare/v0.9.1...v0.10.0) (2026-08-04)
 
 

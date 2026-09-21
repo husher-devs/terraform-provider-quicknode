@@ -206,6 +206,19 @@ func (r *EndpointResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 			return
 		}
 
+		// Configure leaves the chain list empty when the Admin API returned 403,
+		// so an empty list means the key cannot manage endpoints at all.
+		if len(r.chains) == 0 {
+			resp.Diagnostics.AddAttributeError(
+				path.Root("chain"),
+				"Chain list unavailable",
+				"The provider could not fetch the chain list from the Admin API, so the chain and network cannot be validated. "+
+					"Use an API key with Admin API access to manage quicknode_endpoint resources.",
+			)
+
+			return
+		}
+
 		var validChainSlugs []string
 		var validNetworkSlugs []string
 		for _, chain := range r.chains {
